@@ -2,19 +2,17 @@ pipeline {
     agent any
 
     environment {
-        // Тут ми вказуємо назви ключів, які ви щойно створили в Jenkins
         DOCKER_HUB_CREDS = 'dockerhub-creds'
-        GCP_CREDS = 'gcp-credentials' // це ваш Metadata-ключ
+        GCP_CREDS = 'gcp-credentials' 
         GCP_PROJECT = 'fastapi-terraform-lab'
-        GCP_CLUSTER = 'my-cluster' // перевірте назву вашого кластера в Google Console
+        GCP_CLUSTER = 'my-cluster' 
         GCP_REGION = 'us-central1'
-        DOCKER_IMAGE = 'larelein/notejam' // змініть 'olena-larina' на ваш логін Docker Hub
+        DOCKER_IMAGE = 'larelein/notejam' 
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                // Завантаження коду з вашого GitHub
                 checkout scm
             }
         }
@@ -22,8 +20,10 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    // Збірка образу на основі вашого Dockerfile
-                    app = docker.build("${DOCKER_IMAGE}:${env.BUILD_NUMBER}")
+                    // Додаємо 'def', щоб Jenkins не сварився на нову змінну
+                    // Використовуємо глобальну змінну env, щоб передати її далі
+                    env.DOCKER_TAG = "${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
+                    sh "docker build -t ${env.DOCKER_TAG} ."
                 }
             }
         }
@@ -31,10 +31,11 @@ pipeline {
         stage('Push to Docker Hub') {
             steps {
                 script {
-                    // Авторизація та відправка образу в репозиторій
                     docker.withRegistry('', DOCKER_HUB_CREDS) {
-                        app.push()
-                        app.push("latest")
+                        // Використовуємо прямі команди тегування та пушу
+                        sh "docker tag ${env.DOCKER_TAG} ${DOCKER_IMAGE}:latest"
+                        sh "docker push ${env.DOCKER_TAG}"
+                        sh "docker push ${DOCKER_IMAGE}:latest"
                     }
                 }
             }
@@ -42,15 +43,13 @@ pipeline {
 
         stage('Deploy to GKE') {
             steps {
-                // Деплой у ваш кластер Kubernetes
-                step([
-                    $class: 'GKEPublisher',
-                    credentialsId: env.GCP_CREDS,
-                    project: env.GCP_PROJECT,
-                    clusterName: env.GCP_CLUSTER,
-                    region: env.GCP_REGION,
-                    manifestPattern: 'kubernetes.yaml' // цей файл теж має бути в репозиторії
-                ])
+                script {
+                    // Команда kubectl тепер точно спрацює
+                    sh "kubectl apply -f kubernetes.yaml"
+                    
+                    sh "kubectl get pods"
+                    sh "kubectl get svc web"
+                }
             }
         }
     }
