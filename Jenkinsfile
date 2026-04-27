@@ -37,16 +37,18 @@ pipeline {
             sh 'chmod +x ./kubectl'
             sh "sed -i 's|larelein/notejam:latest|larelein/notejam:${env.BUILD_NUMBER}|g' kubernetes.yaml"
 
-            // ПОВНЕ ПЕРЕЗАВАНТАЖЕННЯ КОНФІГУРАЦІЇ
-            sh "gcloud config set project fastapi-terraform-lab"
-            sh "gcloud config set core/disable_usage_reporting True"
-            
-            // Спроба отримати токен напряму (це іноді допомагає "пробити" 403)
-            sh "gcloud auth print-access-token" 
+            // 1. Отримуємо токен і IP кластера
+            def token = sh(script: 'gcloud auth print-access-token', returnStdout: true).trim()
+            // ДІЗНАЙТЕСЯ IP ВАШОГО КЛАСТЕРА (Endpoint) в консолі GCP і вставте сюди замість CLUSTER_IP
+            def clusterIp = sh(script: "gcloud container clusters describe my-cluster --region us-central1 --format='get(endpoint)'", returnStdout: true).trim()
 
-            // ЯВНО ВКАЗУЄМО ПРОЕКТ І РЕГІОН (це важливо)
-            sh "gcloud container clusters get-credentials my-cluster --region us-central1 --project fastapi-terraform-lab"
+            // 2. Налаштовуємо kubectl напряму, минаючи get-credentials
+            sh "./kubectl config set-cluster my-cluster --server=https://${clusterIp} --insecure-skip-tls-verify=true"
+            sh "./kubectl config set-credentials jenkins --token=${token}"
+            sh "./kubectl config set-context default --cluster=my-cluster --user=jenkins"
+            sh "./kubectl config use-context default"
 
+            // 3. ФІНАЛЬНИЙ ДЕПЛОЙ
             sh "./kubectl apply -f kubernetes.yaml"
             sh "./kubectl get pods"
         }
