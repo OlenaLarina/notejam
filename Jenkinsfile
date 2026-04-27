@@ -44,18 +44,18 @@ pipeline {
         stage('Deploy to GKE') {
             steps {
                 script {
-                    // 1. Встановлюємо kubectl через gcloud (це надійніше в GCE)
-                    sh "gcloud components install kubectl --quiet"
+                    // 1. Завантажуємо kubectl напряму, якщо його немає
+                    sh "curl -LO 'https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl'"
+                    sh "chmod +x ./kubectl"
                     
-                    // 2. Отримуємо доступ до кластера
+                    // 2. Авторизація (Важливо: переконайтеся, що ви додали роль IAM, про яку ми говорили минулого разу)
                     sh "gcloud container clusters get-credentials ${GCP_CLUSTER} --region ${GCP_REGION} --project ${GCP_PROJECT}"
                     
-                    // 3. Застосовуємо конфігурацію (вказуємо повний шлях до kubectl)
-                    // Ми додаємо шлях до компонентів gcloud, щоб система бачила kubectl
-                    sh "export PATH=$PATH:/usr/lib/google-cloud-sdk/bin && kubectl apply -f kubernetes.yaml"
+                    // 3. Деплой через завантажений файл kubectl
+                    sh "./kubectl apply -f kubernetes.yaml"
                     
                     // 4. Перевірка
-                    sh "export PATH=$PATH:/usr/lib/google-cloud-sdk/bin && kubectl get pods"
+                    sh "./kubectl get pods"
                 }
             }
         }
