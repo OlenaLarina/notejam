@@ -1,152 +1,139 @@
-#data-db-persistentvolumeclaim.yam
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-labels:
-service: data-db
-name: data-db
+  labels:
+    service: data-db
+  name: data-db
 spec:
-accessModes:
-- ReadWriteOnce
-resources:
-requests:
-storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
 ---
-#db-configmap.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
-labels:
-service: db
-name: db-config
-111
+  labels:
+    service: db
+  name: db-config
 data:
-db-name: "nj"
-#db-secret
+  db-name: "nj"
+---
 apiVersion: v1
 kind: Secret
 metadata:
-name: notejam-credentials
+  name: notejam-credentials
 type: Opaque
 data:
-user: YWRtaW4=
-password: YWRtaW5AMTIz
-#db-deployment
+  user: YWRtaW4=
+  password: YWRtaW5AMTIz
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-labels:
-service: db
-name: db
+  labels:
+    service: db
+  name: db
 spec:
-replicas: 1
-selector:
-matchLabels:
-service: db
-template:
-metadata:
-labels:
-service: db
-tier: backend
-spec:
-containers:
-- image: postgres
-name: database
-env:
-- name: POSTGRES_USER
-valueFrom:
-secretKeyRef:
-name: notejam-credentials
-key: user
-- name: POSTGRES_PASSWORD
-valueFrom:
-secretKeyRef:
-name: notejam-credentials
-key: password
-112
-- name: POSTGRES_DB
-valueFrom:
-configMapKeyRef:
-name: db-config
-key: db-name
-ports:
-- containerPort: 5432
-resources:
-requests:
-cpu: 100m
-memory: 128Mi
-limits:
-cpu: 250m
-memory: 256Mi
-volumeMounts:
-- mountPath: /var/lib/postgresql/data
-name: data-db
-restartPolicy: Always
-volumes:
-- name: data-db
-persistentVolumeClaim:
-claimName: data-db
-#db-service.yaml
+  replicas: 1
+  selector:
+    matchLabels:
+      service: db
+  template:
+    metadata:
+      labels:
+        service: db
+        tier: backend
+    spec:
+      containers:
+      - image: postgres
+        name: database
+        env:
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: notejam-credentials
+              key: user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: notejam-credentials
+              key: password
+        - name: POSTGRES_DB
+          valueFrom:
+            configMapKeyRef:
+              name: db-config
+              key: db-name
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: data-db
+      volumes:
+      - name: data-db
+        persistentVolumeClaim:
+          claimName: data-db
+---
 apiVersion: v1
 kind: Service
 metadata:
-labels:
-service: db
-name: db
+  labels:
+    service: db
+  name: db
 spec:
-ports:
-- name: "5432"
-protocol: TCP
-port: 5432
-targetPort: 5432
-selector:
-service: db
+  ports:
+  - name: "5432"
+    protocol: TCP
+    port: 5432
+    targetPort: 5432
+  selector:
+    service: db
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-labels:
-service: web
-name: web
-113
+  labels:
+    service: web
+  name: web
 spec:
-replicas: 1
-selector:
-matchLabels:
-service: web
-template:
-metadata:
-labels:
-service: web
-spec:
-containers:
-- args:
-- bash
-- -c
-- python manage.py syncdb --noinput && python manage.py migrate
-&& python manage.py runserver 0.0.0.0:5000
-image: larelein/notejam:latest
-name: notejam
-ports:
-- containerPort: 5000
-resources:
-requests:
-cpu: 100m
-memory: 128Mi
-limits:
-cpu: 250m
-memory: 250Mi
-restartPolicy: Always
+  replicas: 1
+  selector:
+    matchLabels:
+      service: web
+  template:
+    metadata:
+      labels:
+        service: web
+    spec:
+      containers:
+      - name: notejam
+        image: larelein/notejam:latest
+        args:
+        - bash
+        - -c
+        - "python manage.py syncdb --noinput && python manage.py migrate && python manage.py runserver 0.0.0.0:5000"
+        ports:
+        - containerPort: 5000
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 250m
+            memory: 250Mi
+---
 apiVersion: v1
 kind: Service
 metadata:
-labels:
-service: web
-name: web
+  labels:
+    service: web
+  name: web
 spec:
-type: LoadBalancer
-ports:
-- name: "5000"
-port: 5000
-targetPort: 5000
-selector:
-service: web
+  type: LoadBalancer
+  ports:
+  - name: "5000"
+    port: 5000
+    targetPort: 5000
+  selector:
+    service: web
