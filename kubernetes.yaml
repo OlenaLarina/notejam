@@ -65,6 +65,8 @@ spec:
             configMapKeyRef:
               name: db-config
               key: db-name
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
         ports:
         - containerPort: 5432
         volumeMounts:
