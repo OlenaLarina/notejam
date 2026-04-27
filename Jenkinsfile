@@ -44,11 +44,18 @@ pipeline {
         stage('Deploy to GKE') {
             steps {
                 script {
-                    // Команда kubectl тепер точно спрацює
+                    // 1. Встановлюємо kubectl, якщо його немає
+                    sh "sudo apt-get update && sudo apt-get install -y kubectl || echo 'kubectl already installed'"
+                    
+                    // 2. Авторизуємося в кластері (використовуємо дані з environment)
+                    // Ця команда "подружить" Jenkins з вашим кластером
+                    sh "gcloud container clusters get-credentials ${GCP_CLUSTER} --region ${GCP_REGION} --project ${GCP_PROJECT}"
+                    
+                    // 3. Запускаємо деплой
                     sh "kubectl apply -f kubernetes.yaml"
                     
+                    // 4. Перевірка
                     sh "kubectl get pods"
-                    sh "kubectl get svc web"
                 }
             }
         }
