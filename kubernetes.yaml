@@ -47,7 +47,7 @@ spec:
         tier: backend
     spec:
       containers:
-      - image: postgres
+      - image: postgres:15
         name: database
         env:
         - name: POSTGRES_USER
