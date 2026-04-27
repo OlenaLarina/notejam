@@ -2,40 +2,29 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_HUB_CREDS = 'dockerhub-creds'
-        GCP_CREDS = 'gcp-credentials' 
-        GCP_PROJECT = 'fastapi-terraform-lab'
-        GCP_CLUSTER = 'my-cluster' 
-        GCP_REGION = 'us-central1'
-        DOCKER_IMAGE = 'larelein/notejam' 
+        PROJECT_ID = 'fastapi-terraform-lab' // Ваш ID проекту
+        CLUSTER_NAME = 'my-cluster'         // Ваша назва кластера
+        LOCATION = 'us-central1'            // Ваш регіон
+        DOCKER_IMAGE = 'larelein/notejam'   // Ваш образ
     }
 
     stages {
-        stage('Checkout Code') {
+        stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build and Push') {
             steps {
                 script {
-                    // Додаємо 'def', щоб Jenkins не сварився на нову змінну
-                    // Використовуємо глобальну змінну env, щоб передати її далі
-                    env.DOCKER_TAG = "${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
-                    sh "docker build -t ${env.DOCKER_TAG} ."
-                }
-            }
-        }
-
-        stage('Push to Docker Hub') {
-            steps {
-                script {
-                    docker.withRegistry('', DOCKER_HUB_CREDS) {
-                        // Використовуємо прямі команди тегування та пушу
-                        sh "docker tag ${env.DOCKER_TAG} ${DOCKER_IMAGE}:latest"
-                        sh "docker push ${env.DOCKER_TAG}"
-                        sh "docker push ${DOCKER_IMAGE}:latest"
+                    // Збираємо образ
+                    def app = docker.build("${DOCKER_IMAGE}:${env.BUILD_NUMBER}")
+                    
+                    // Пушимо в Docker Hub (використовуємо ваш існуючий запис 'dockerhub-creds')
+                    docker.withRegistry('', 'dockerhub-creds') {
+                        app.push()
+                        app.push("latest")
                     }
                 }
             }
@@ -44,19 +33,21 @@ pipeline {
         stage('Deploy to GKE') {
             steps {
                 script {
-                    // Використовуємо одинарні лапки для sh, щоб Groovy не чіпав знаки долара
+                    // 1. Завантажуємо kubectl (це ми вже перевірили, працює)
                     sh 'curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"'
                     sh 'chmod +x ./kubectl'
+
+                    // 2. Оновлюємо тег образу у файлі маніфесту (як у методичці через sed)
+                    // Замінюємо заглушку в kubernetes.yaml на реальний номер білду
+                    sh "sed -i 's|${DOCKER_IMAGE}:latest|${DOCKER_IMAGE}:${env.BUILD_NUMBER}|g' kubernetes.yaml"
+
+                    // 3. Авторизація через права самої VM (Full Access)
+                    sh "gcloud container clusters get-credentials ${CLUSTER_NAME} --region ${LOCATION} --project ${PROJECT_ID}"
+
+                    // 4. Деплой
+                    sh "./kubectl apply -f kubernetes.yaml"
                     
-                    // Тут можна залишити подвійні лапки, бо ми використовуємо змінні Jenkins
-                    sh "gcloud container clusters get-credentials ${GCP_CLUSTER} --region ${GCP_REGION} --project ${GCP_PROJECT}"
-                    
-                    // Деплой
-                    sh './kubectl apply -f kubernetes.yaml'
-                    
-                    // Перевірка
-                    sh './kubectl get pods'
-                    sh './kubectl get svc web'
+                    echo "Deployment finished successfully!"
                 }
             }
         }
